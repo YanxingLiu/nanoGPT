@@ -214,6 +214,7 @@ if ddp:
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
 def estimate_loss():
+    # 先评估下当前模型在训练集和验证集上的loss
     out = {}
     model.eval()
     for split in ['train', 'val']:

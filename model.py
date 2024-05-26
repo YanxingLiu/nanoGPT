@@ -101,8 +101,8 @@ class Block(nn.Module):
         self.mlp = MLP(config)
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
+        x = x + self.attn(self.ln_1(x)) # x和attn(ln(x))相加
+        x = x + self.mlp(self.ln_2(x))  # x和mlp(ln(x))相加
         return x
 
 @dataclass
@@ -127,10 +127,10 @@ class GPT(nn.Module):
             wte = nn.Embedding(config.vocab_size, config.n_embd), #文本 embedding 
             wpe = nn.Embedding(config.block_size, config.n_embd), #位置 embedding
             drop = nn.Dropout(config.dropout), # Dropout layer
-            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]), # 一个Transformer Block
-            ln_f = LayerNorm(config.n_embd, bias=config.bias),
+            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]), # Transformer Block
+            ln_f = LayerNorm(config.n_embd, bias=config.bias), # LayerNorm
         ))
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False) # 输出全连接层，输入词表的概率密度
         # with weight tying when using torch.compile() some warnings get generated:
         # "UserWarning: functional_call was passed multiple values for tied weights.
         # This behavior is deprecated and will be an error in future versions"
@@ -176,15 +176,15 @@ class GPT(nn.Module):
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
-        x = self.transformer.drop(tok_emb + pos_emb)
+        x = self.transformer.drop(tok_emb + pos_emb) # 文本 embedding 和位置 embedding 相加之后再加上一个 Dropout
         for block in self.transformer.h:
             x = block(x)
-        x = self.transformer.ln_f(x)
+        x = self.transformer.ln_f(x) # 
 
-        if targets is not None:
+        if targets is not None: 
             # if we are given some desired targets also calculate the loss
-            logits = self.lm_head(x)
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            logits = self.lm_head(x) # 每个位置的输出概率密度 [n_batch, n_block, n_vocab]
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1) # 计算每个位置的预测值和真实值的交叉熵，即目标为尽可能让模型根据之前的上下文预测出下一个内容。
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
